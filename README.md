@@ -39,7 +39,8 @@ brief on disk. Email, newsletters and the scheduled run come after that, and
 only if you want them. [`skills/vertigo-setup/SKILL.md`](skills/vertigo-setup/SKILL.md)
 is the whole procedure, if you would rather do it by hand.
 
-You need an OpenAI API key. You do not need any newsletters.
+You need an API key from OpenAI **or** Anthropic (Claude), one of the two.
+You do not need any newsletters.
 
 ## How it is laid out
 
@@ -50,7 +51,7 @@ scripts/
   falsifier_monitor.py      evaluates `check: auto` falsifiers (ƒ)
   regime_strip.py           VIX, credit spreads, curve, rates, drawdown… (ƒ)
   market_brief_newsletters.py  reads newsletters over IMAP for General news (optional)
-  brief_ai.py               the AI half (OpenAI API)
+  brief_ai.py               the AI half (OpenAI or Anthropic API)
   send_brief.py             renders and emails the result (optional)
   check_brief_landed.sh     optional local watchdog: re-dispatches a missing brief
 skills/market-brief/        the same brief as an interactive Claude Code skill
@@ -93,9 +94,13 @@ Only the first is required. Each one adds a file and nothing else changes.
 
 | tier | you set | you get |
 |---|---|---|
-| minimal | `openai.env`: `OPENAI_API_KEY` | the brief as a markdown file in `~/briefs/`. General news is omitted and the footer says so. |
+| minimal | `openai.env`: `OPENAI_API_KEY`, **or** `anthropic.env`: `ANTHROPIC_API_KEY` | the brief as a markdown file in `~/briefs/`. General news is omitted and the footer says so. |
 | + email | `mail.env`: `SMTP_USER`, `SMTP_PASSWORD`, optionally `SMTP_HOST`, `SMTP_PORT` (default `smtp.gmail.com:587`; 465 means TLS), `SMTP_FROM`, `BRIEF_MAIL_TO` | the same brief, emailed as HTML |
 | + newsletters | `newsletter.env`: `IMAP_USER`, `IMAP_APP_PASSWORD`, optionally `IMAP_HOST`, `IMAP_MAILBOX`; and `NEWSLETTER_SENDERS` | a General news section, written by the model from the newsletters in that mailbox |
+
+With both keys present OpenAI is used; `BRIEF_AI_PROVIDER=anthropic` picks
+Claude instead. The default models are `gpt-5.5` and `claude-opus-5-5`, and
+`BRIEF_MODEL` overrides either.
 
 Email and newsletters are independent. Without `mail.env` the brief is
 emailed from the newsletter mailbox, if there is one, which is how the job was
@@ -137,7 +142,9 @@ nothing until you configure it:
   two **private** repositories, one holding your `~/.vertigo` files and one
   receiving the briefs
 - secrets `VERTIGO_PAT` (a token that can read the first repository and push to
-  the second) and `OPENAI_API_KEY`
+  the second) and either `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` (with both,
+  set the variable `BRIEF_AI_PROVIDER` to `anthropic` to use Claude;
+  `BRIEF_MODEL` is a variable too)
 
 That is the minimal tier. For email add the secrets `SMTP_USER`,
 `SMTP_PASSWORD` and `BRIEF_MAIL_TO` (and the variables `SMTP_HOST`, `SMTP_PORT`
@@ -157,9 +164,12 @@ What a stranger still needs to know before setting it up:
   Yahoo through `yfinance`, which is unofficial and occasionally rate-limited
   or wrong. The run waits for a working Yahoo session and fails if there is
   none. The regime strip also reads FRED.
-- **OpenAI only.** The judgement half calls the OpenAI API (`gpt-5.5` by
-  default, `BRIEF_MODEL` overrides it) and costs API credit on every run.
-  There is no switch for another provider.
+- **OpenAI or Anthropic.** The judgement half calls the OpenAI API
+  (`gpt-5.5` by default) or the Anthropic API (`claude-opus-5-5` by default),
+  whichever key you set; `BRIEF_AI_PROVIDER` chooses when both are set and
+  `BRIEF_MODEL` overrides the model. Either way it costs API credit on every
+  run. Both get the same prompt, and the `AI`/`ƒ` labels are added by the
+  script, not by the model.
 - **Your own theses.** The brief compares the news with what you wrote. With
   no thesis for a holding, it says so and has nothing to compare against.
 - **One user.** One book, one set of theses, one recipient.

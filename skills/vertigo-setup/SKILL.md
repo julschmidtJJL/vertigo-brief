@@ -43,7 +43,7 @@ order. Stop and ask whenever a step needs a decision only the user can make.
 Tell the user up front what the brief needs, so they can stop early if it does
 not fit: a book valued in **EUR**, holdings that **Yahoo Finance** prices
 (foreign listings in USD, CAD or HKD are converted; other currencies are not),
-and an **OpenAI API key** for the judgement half. Newsletters and email are
+and an API key from **OpenAI or Anthropic** (either one) for the judgement half. Newsletters and email are
 optional.
 
 ## 1. Install
@@ -171,19 +171,31 @@ Then run the monitor once against live data and show the user the table:
 venv/bin/python3 scripts/falsifier_monitor.py
 ```
 
-## 7. OpenAI key
+## 7. API key (OpenAI or Anthropic)
 
-Ask the user to create the key file themselves, in their own terminal:
+Ask the user which key they have: OpenAI or Anthropic (Claude). One is
+enough. Then ask them to create the key file themselves, in their own terminal.
+For OpenAI:
 
 ```bash
 mkdir -p ~/.config/vertigo && touch ~/.config/vertigo/openai.env && chmod 600 ~/.config/vertigo/openai.env
 ```
 
-and then add one line `OPENAI_API_KEY=…` with an editor. The file must be
-`chmod 600` or it is refused. Alternatively `OPENAI_API_KEY` can be set in the
-environment of the shell that runs the brief. Wait until they say it is done.
-The model defaults to `gpt-5.5` (`BRIEF_MODEL` overrides it); the call costs
-API credit on every run.
+and then add one line `OPENAI_API_KEY=…` with an editor. For Anthropic:
+
+```bash
+mkdir -p ~/.config/vertigo && touch ~/.config/vertigo/anthropic.env && chmod 600 ~/.config/vertigo/anthropic.env
+```
+
+and then add one line `ANTHROPIC_API_KEY=…`. The file must be `chmod 600` or
+it is refused. Alternatively the variable can be set in the environment of the
+shell that runs the brief. Wait until they say it is done.
+
+The provider follows the key that is present. If both are, OpenAI is used
+unless `BRIEF_AI_PROVIDER=anthropic` is set. The models default to `gpt-5.5`
+and `claude-opus-5-5` (`BRIEF_MODEL` overrides either); the call costs API
+credit on every run. The log line `brief_ai: <provider> <model> …` in
+`daily-brief.log` shows which one ran.
 
 ## 8. First run, no email
 
@@ -261,7 +273,9 @@ something on GitHub:
   `BRIEFS_REPO` (`owner/name`), optionally `NEWSLETTER_SENDERS`, `SMTP_HOST`
   and `SMTP_PORT`.
 - Secrets: `VERTIGO_PAT` (a fine-grained token with contents read on the
-  state repo and read/write on the briefs repo), `OPENAI_API_KEY`, and
+  state repo and read/write on the briefs repo), `OPENAI_API_KEY` or
+  `ANTHROPIC_API_KEY` (with both, the variable `BRIEF_AI_PROVIDER=anthropic`
+  picks Claude), and
   optionally `SMTP_USER`, `SMTP_PASSWORD`, `BRIEF_MAIL_TO`, `IMAP_USER`,
   `IMAP_APP_PASSWORD`, `IMAP_MAILBOX`. The user sets each one with
   `gh secret set NAME`, which prompts for the value, or in the repository

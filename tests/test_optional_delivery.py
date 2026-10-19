@@ -2,8 +2,8 @@
 
 The brief has three tiers of setup:
 
-    minimal      OPENAI_API_KEY only. Markdown file on disk, General news
-                 omitted, no email.
+    minimal      OPENAI_API_KEY or ANTHROPIC_API_KEY only. Markdown file on
+                 disk, General news omitted, no email.
     + email      SMTP_USER / SMTP_PASSWORD (or, for the original one-account
                  setup, the newsletter mailbox's IMAP credentials).
     + newsletters  IMAP credentials and NEWSLETTER_SENDERS.
@@ -238,7 +238,7 @@ def test_discover_runs_without_a_sender_list(clean_env, no_imap, monkeypatch):
 
 # --- run_daily_brief.sh, end to end, per tier --------------------------------
 #
-# A stand-in python3 answers for every step that would touch Yahoo or OpenAI,
+# A stand-in python3 answers for every step that would touch Yahoo or the model,
 # and hands the newsletter fetcher and the sender to the real interpreter, so
 # their degradation is the real code's. Mail and IMAP hosts point at a closed
 # local port: a configured tier is ATTEMPTED and fails fast, which is the
@@ -284,7 +284,8 @@ def runner(tmp_path):
 
     def run(**extra):
         env = {k: v for k, v in os.environ.items()
-               if k not in MAIL_KEYS and k != "OPENAI_API_KEY"}
+               if k not in MAIL_KEYS
+               and k not in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")}
         env.update({
             "HOME": str(tmp_path / "home"),          # no ~/.config/vertigo
             "VERTIGO_PYTHON": str(stub),
