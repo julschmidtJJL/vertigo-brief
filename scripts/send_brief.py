@@ -15,13 +15,23 @@ URLs up to 410 characters. As plain text that is pipe soup with a wall of
 base64 through the middle, which is worse than the GitHub rendering it would
 be competing with.
 
-Credentials: the SAME file the newsletter fetcher uses,
-~/.config/vertigo/newsletter.env — same Gmail account, same app password, SMTP
-instead of IMAP. No second secret anywhere.
+Credentials: its own settings, with the newsletter mailbox as a fallback.
+Email delivery and newsletter reading are separate features, so either can be
+configured without the other. Each key is read from ~/.config/vertigo/mail.env,
+then ~/.config/vertigo/newsletter.env, then the environment.
 
-    IMAP_USER / IMAP_APP_PASSWORD      reused
-    BRIEF_MAIL_TO                      optional, defaults to IMAP_USER
-    SMTP_HOST / SMTP_PORT              optional, default smtp.gmail.com:587
+    SMTP_USER / SMTP_PASSWORD   the account that sends. If neither is set, the
+                                newsletter mailbox's IMAP_USER /
+                                IMAP_APP_PASSWORD are used instead, which is
+                                how the job was first set up: one Gmail
+                                account, one app password, SMTP instead of IMAP.
+    SMTP_HOST / SMTP_PORT       optional, default smtp.gmail.com:587. Port 465
+                                connects over TLS; any other port uses STARTTLS.
+    SMTP_FROM                   optional, defaults to the sending account
+    BRIEF_MAIL_TO               optional, defaults to the sending account
+
+Exit status: 0 sent, 1 failed, 2 not configured (nothing to send with). The
+daily job treats 2 as "email is off", not as a failure.
 
 Usage:  send_brief.py PATH.md [--to addr] [--dry-run]
 """
@@ -31,6 +41,9 @@ from email.utils import formatdate, make_msgid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from market_brief_newsletters import load_env, DEFAULT_ENV, IMAP_TIMEOUT
+
+MAIL_ENV = os.path.expanduser("~/.config/vertigo/mail.env")
+NOT_CONFIGURED = 2
 
 # Restrained, high-contrast, and readable on a phone. No web fonts, no images,
 # no tracking — mail clients strip half of it anyway and the rest is noise.
@@ -69,11 +82,62 @@ def subject_for(md_text, stamp):
     return f"Brief {stamp}"
 
 
+def load_files(paths):
+    """Merge KEY=VALUE files, earlier paths winning. A missing file is not an
+    error, since every setting can arrive from the environment instead. A file
+    that exists and cannot be used is, and the reason is returned."""
+    merged, errors = {}, []
+    for path in paths:
+        if not os.path.exists(path):
+            continue
+        env, err = load_env(path)
+        if err:
+            errors.append(err)
+        for k, v in env.items():
+            merged.setdefault(k, v)
+    return merged, "; ".join(errors) or None
+
+
+def mail_config(env, environ=None):
+    """Resolve the sending settings. File first, then the environment, then the
+    default, for every key; see the same helper in market_brief_newsletters.py
+    for why each setting needs it.
+
+    The account is resolved as a PAIR. A SMTP_USER with the IMAP password, or
+    the reverse, would log one account in with another account's secret, so
+    the IMAP fallback applies only when neither SMTP key is set."""
+    environ = os.environ if environ is None else environ
+
+    def cfg(key, default=None):
+        v = env.get(key) or environ.get(key)
+        return v if v not in (None, "") else default
+
+    if cfg("SMTP_USER") or cfg("SMTP_PASSWORD"):
+        user, pw, source = cfg("SMTP_USER"), cfg("SMTP_PASSWORD"), "SMTP"
+    else:
+        user, pw, source = cfg("IMAP_USER"), cfg("IMAP_APP_PASSWORD"), "IMAP"
+    host = cfg("SMTP_HOST", "smtp.gmail.com")
+    try:
+        port = int(cfg("SMTP_PORT", "587"))
+    except ValueError:
+        port = 587
+    return {
+        "user": user,
+        "pw": (pw or "").replace(" ", "") if host == "smtp.gmail.com" else (pw or ""),
+        "source": source,
+        "host": host,
+        "port": port,
+        "sender": cfg("SMTP_FROM") or user,
+        "to": cfg("BRIEF_MAIL_TO") or user,
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("path")
     ap.add_argument("--to")
-    ap.add_argument("--env", default=DEFAULT_ENV)
+    ap.add_argument("--env", help="read settings from this file only "
+                    f"(default: {MAIL_ENV}, then {DEFAULT_ENV})")
     ap.add_argument("--dry-run", action="store_true",
                     help="render and print what would be sent, connect to nothing")
     a = ap.parse_args()
@@ -84,23 +148,14 @@ def main():
     md_text = open(a.path).read()
     stamp = os.path.splitext(os.path.basename(a.path))[0]
 
-    env, err = load_env(a.env)
-
-    def cfg(key, default=None):
-        """File, then environment, then default — see the same helper in
-        market_brief_newsletters.py for why every setting needs it."""
-        v = env.get(key) or os.environ.get(key)
-        return v if v not in (None, "") else default
-
-    user = cfg("IMAP_USER")
-    pw = (cfg("IMAP_APP_PASSWORD") or "").replace(" ", "")
-    to = a.to or cfg("BRIEF_MAIL_TO") or user
-    host = cfg("SMTP_HOST", "smtp.gmail.com")
-    port = int(cfg("SMTP_PORT", "587"))
+    env, err = load_files([a.env] if a.env else [MAIL_ENV, DEFAULT_ENV])
+    c = mail_config(env)
+    user, pw, host, port = c["user"], c["pw"], c["host"], c["port"]
+    to = a.to or c["to"]
 
     msg = EmailMessage()
     msg["Subject"] = subject_for(md_text, stamp)
-    msg["From"] = user or "vertigo@localhost"
+    msg["From"] = c["sender"] or "vertigo@localhost"
     msg["To"] = to or "unset"
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain="vertigo.local")
@@ -120,21 +175,35 @@ def main():
         return 0
 
     # Same as the fetcher: the file is one source, the environment another, and
-    # in CI only the second exists.
+    # in CI only the second exists. Nothing configured at all is not a failure:
+    # email is optional, and the brief is already on disk.
+    if not user and not pw and not err:
+        print("send_brief: email not configured (no SMTP_USER/SMTP_PASSWORD "
+              "or IMAP_USER/IMAP_APP_PASSWORD)", file=sys.stderr)
+        return NOT_CONFIGURED
     if not user or not pw:
-        print(f"send_brief: {err or 'IMAP_USER or IMAP_APP_PASSWORD not set'}",
-              file=sys.stderr)
+        pair = "SMTP_USER and SMTP_PASSWORD" if c["source"] == "SMTP" \
+            else "IMAP_USER and IMAP_APP_PASSWORD"
+        print(f"send_brief: {err or pair + ' must both be set'}", file=sys.stderr)
         return 1
-    if not re.fullmatch(r"[a-z]{16}", pw):
+    if host == "smtp.gmail.com" and not re.fullmatch(r"[a-z]{16}", pw):
         # Same guard as the fetcher. Gmail answers a malformed password the
         # same way it answers a rate limit, and a day was lost to that once.
-        print("send_brief: IMAP_APP_PASSWORD is not 16 lowercase letters; "
-              "not attempting a login", file=sys.stderr)
+        # Gmail only: other providers' passwords have no fixed shape.
+        print(f"send_brief: {c['source']} password is not 16 lowercase letters, "
+              "the shape of a Gmail app password; not attempting a login",
+              file=sys.stderr)
         return 1
 
     try:
-        with smtplib.SMTP(host, port, timeout=IMAP_TIMEOUT) as s:
-            s.starttls(context=ssl.create_default_context())
+        if port == 465:
+            conn = smtplib.SMTP_SSL(host, port, timeout=IMAP_TIMEOUT,
+                                    context=ssl.create_default_context())
+        else:
+            conn = smtplib.SMTP(host, port, timeout=IMAP_TIMEOUT)
+        with conn as s:
+            if port != 465:
+                s.starttls(context=ssl.create_default_context())
             s.login(user, pw)
             s.send_message(msg)
     except Exception as e:

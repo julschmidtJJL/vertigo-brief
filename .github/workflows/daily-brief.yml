@@ -33,11 +33,37 @@ jobs:
     # Runs only once the repo is configured: set the VERTIGO_STATE_REPO and
     # BRIEFS_REPO repository variables (owner/name of two PRIVATE repos) and
     # the VERTIGO_PAT secret. See README.md.
-    if: vars.VERTIGO_STATE_REPO != ''
+    # BOTH variables, not just the first: actions/checkout given an empty
+    # `repository` checks out THIS repository, and the briefs, which carry
+    # position values, would then be pushed into the code repo.
+    if: vars.VERTIGO_STATE_REPO != '' && vars.BRIEFS_REPO != ''
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
+      # Positions, theses and every brief are personal. Refuse to read or
+      # write either repo unless GitHub says it is private. The code repo
+      # too: the Report step prints the run log, which carries every step's
+      # stderr, and Actions logs on a public repository are public. Run this
+      # from a private copy, not a public fork.
+      - name: Refuse public repositories
+        env:
+          PAT: ${{ secrets.VERTIGO_PAT }}
+          OWN_TOKEN: ${{ github.token }}
+          STATE_REPO: ${{ vars.VERTIGO_STATE_REPO }}
+          BRIEFS: ${{ vars.BRIEFS_REPO }}
+        run: |
+          check() {
+            p="$(GH_TOKEN="$2" gh api "repos/$1" --jq .private 2>/dev/null || echo unknown)"
+            if [ "$p" != "true" ]; then
+              echo "::error::$1 is not a private repository the token can read (private=$p)"
+              exit 1
+            fi
+          }
+          check "$GITHUB_REPOSITORY" "$OWN_TOKEN"
+          check "$STATE_REPO" "$PAT"
+          check "$BRIEFS" "$PAT"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -92,16 +118,27 @@ jobs:
       - name: Run the brief
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # Everything below is optional. With only OPENAI_API_KEY set, the
+          # brief is written and pushed, General news is omitted and no email
+          # is sent. An unset secret arrives as an empty string, which every
+          # script treats as unset.
+          #
+          # Newsletters: the mailbox they arrive in, and which senders count.
           IMAP_USER: ${{ secrets.IMAP_USER }}
           IMAP_APP_PASSWORD: ${{ secrets.IMAP_APP_PASSWORD }}
           IMAP_MAILBOX: ${{ secrets.IMAP_MAILBOX }}
-          # Output address, deliberately NOT the input one. The brief is sent
-          # FROM the newsletter mailbox (that account owns the app password)
-          # but TO the personal address: the asset-management mailbox takes ~10
-          # newsletters a day and is an input collection. Delivering the brief
-          # there buries the one thing written FOR the reader among the
-          # subscriptions. A secret rather than a literal so it is redacted in
-          # run logs like every other address here.
+          NEWSLETTER_SENDERS: ${{ vars.NEWSLETTER_SENDERS }}
+          # Email delivery. When SMTP_USER and SMTP_PASSWORD are both unset,
+          # the brief is sent from the newsletter mailbox above instead.
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          # Output address, deliberately NOT the input one: a mailbox that
+          # takes ~10 newsletters a day is an input collection, and delivering
+          # the brief there buries the one thing written FOR the reader among
+          # the subscriptions. A secret rather than a literal so it is redacted
+          # in run logs like every other address here.
           BRIEF_MAIL_TO: ${{ secrets.BRIEF_MAIL_TO }}
           VERTIGO_REPO: ${{ github.workspace }}
           VERTIGO_HOME: ${{ github.workspace }}/state

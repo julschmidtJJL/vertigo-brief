@@ -17,7 +17,11 @@ REPO="${VERTIGO_REPO:-$(cd "$(dirname "$0")/.." && pwd)}"
 # which takes it as a flag.
 VHOME="${VERTIGO_HOME:-$HOME/.vertigo}"
 export VERTIGO_HOME="$VHOME"
-PY="${VERTIGO_PYTHON:-$REPO/venv/bin/python3}"
+# The repo's own venv when there is one, else whatever python3 is on PATH, so
+# a plain `pip install -r requirements.txt` is enough to run it.
+if [ -n "${VERTIGO_PYTHON:-}" ]; then PY="$VERTIGO_PYTHON"
+elif [ -x "$REPO/venv/bin/python3" ]; then PY="$REPO/venv/bin/python3"
+else PY="python3"; fi
 
 # Shared with the weekly scoreboard job (kept private). Staging, rebase-and-retry, and a non-zero
 # exit on failure all live there so the two jobs cannot drift apart again.
@@ -146,6 +150,7 @@ run_step 420 "news gather" "$JSON" "$PY" "$REPO/scripts/market_brief_gather.py" 
 run_step 180 "newsletter fetch" "$NEWS" "$PY" "$REPO/scripts/market_brief_newsletters.py" --hours "$HOURS" \
   || echo "WARN: newsletter fetch failed or timed out" >> "$LOG"
 NL_OK=0
+NL_CONF=1
 if [ -s "$NEWS" ]; then
   NL_N="$("$PY" -c "
 import json;d=json.load(open('$NEWS'))
@@ -158,6 +163,11 @@ print(d.get('count',0) if d.get('ok') else -1)" 2>/dev/null || echo -1)"
 import json;print(json.load(open('$NEWS')).get('mailbox','?'))" 2>/dev/null || echo '?')"
     NL_OK=1; echo "newsletters: $NL_N in window (from $NL_BOX)" >> "$LOG"
   else
+    # Newsletters are optional. `configured: false` means none were asked for,
+    # which the footer says plainly instead of pointing at the log as if
+    # something had gone wrong.
+    "$PY" -c "
+import json,sys;sys.exit(json.load(open('$NEWS')).get('configured',True) is False)" 2>/dev/null || NL_CONF=0
     echo "newsletters: none ($("$PY" -c "
 import json;print(json.load(open('$NEWS')).get('error','no mail in window'))" 2>/dev/null))" >> "$LOG"
   fi
@@ -473,6 +483,8 @@ print(', '.join(c['company'] for c in d['companies']
   echo
   if [ "$NL_OK" -eq 1 ]; then
     echo "\`ƒ\` General news read from ${NL_N} newsletter(s) in the last ${HOURS}h, in the model's own words."
+  elif [ "$NL_CONF" -eq 0 ]; then
+    echo "\`ƒ\` No newsletters configured — General news omitted."
   else
     echo "\`ƒ\` No newsletters read this run — General news omitted. See \`daily-brief.log\`."
   fi
@@ -591,12 +603,16 @@ briefs_push "$OUT_DIR" "brief: $STAMP" "$STAMP.md" decisions.jsonl || PUSH_OK=0
 # if generation ever moves elsewhere, delivery moves with it unchanged. Fail-soft
 # by design: the durable copy is already on GitHub by the time this runs, so a
 # mail failure costs the email and nothing else. That sentence is true now.
+#
+# Email is optional: send_brief.py exits 2 when nothing is configured to send
+# with, and that is a setting, not a failure. BRIEF_MAIL=0 skips the step.
 if [ "${BRIEF_MAIL:-1}" = "1" ]; then
-  if run_step 120 "brief email" /dev/null "$PY" "$REPO/scripts/send_brief.py" "$OUT"; then
-    echo "emailed" >> "$LOG"
-  else
-    echo "WARN: brief email failed — the pushed copy is unaffected" >> "$LOG"
-  fi
+  run_step 120 "brief email" /dev/null "$PY" "$REPO/scripts/send_brief.py" "$OUT"
+  case $? in
+    0) echo "emailed" >> "$LOG" ;;
+    2) echo "email: not configured — brief is at $OUT" >> "$LOG" ;;
+    *) echo "WARN: brief email failed — the pushed copy is unaffected" >> "$LOG" ;;
+  esac
 fi
 
 # Loud only when a rule fired or could not be evaluated, or the AI half died.

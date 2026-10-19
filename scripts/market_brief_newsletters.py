@@ -21,6 +21,8 @@ CREDENTIALS — never in git, never in this file, never logged:
     IMAP_HOST=imap.gmail.com
     IMAP_PORT=993
     IMAP_MAILBOX=INBOX
+    # which senders count as newsletters; empty means none are read
+    NEWSLETTER_SENDERS=example-paper.com,another-paper.de
 
 Generate the app password at https://myaccount.google.com/apppasswords (needs
 2-Step Verification on). It is EXACTLY 16 LOWERCASE LETTERS, shown in four
@@ -46,11 +48,18 @@ LEGACY_ENV = os.path.expanduser("~/.vertigo/newsletter.env")
 
 # Domains whose mail counts as a newsletter. Anything else in the mailbox is
 # ignored, so this account can carry ordinary mail without it reaching a brief.
-# Run --discover to see what is actually arriving and extend the list.
-# NEWSLETTER_SENDERS (comma-separated domains) replaces the default.
-SENDERS = [d.strip() for d in os.environ.get(
-    "NEWSLETTER_SENDERS", "handelsblatt.com,wiwo.de,wirtschaftswoche.de").split(",")
-    if d.strip()]
+# Run --discover to see what is actually arriving, then set
+# NEWSLETTER_SENDERS (comma-separated domains) in the credential file or the
+# environment.
+#
+# EMPTY BY DEFAULT. The list used to default to the two German business papers
+# the author reads, which meant anyone else with a mailbox configured had the
+# brief quietly filtering for subscriptions they do not have. No list means no
+# newsletters: the fetcher returns before any login and General news is
+# omitted, which is the same outcome as having no mailbox at all.
+def parse_senders(value):
+    return [d.strip().lower() for d in (value or "").split(",") if d.strip()]
+
 
 # Per-newsletter character cap. A Handelsblatt morning briefing runs long, and
 # several of them plus 37KB of holdings JSON is a lot of prompt for a job on a
@@ -167,6 +176,17 @@ def main():
         nothing reported a problem."""
         v = env.get(key) or os.environ.get(key)
         return v if v not in (None, "") else default
+
+    senders = parse_senders(cfg("NEWSLETTER_SENDERS"))
+    # Nothing to look for is not an error, and must not cost a login: a
+    # mailbox that is configured only for email delivery should never be read.
+    # --discover and --list-mailboxes are how the list gets written, so they
+    # run without one.
+    if not senders and not (args.discover or args.list_mailboxes):
+        return out({"ok": False, "newsletters": [], "configured": False,
+                    "error": "NEWSLETTER_SENDERS not set — no newsletters read",
+                    "hint": "run with --discover to see who is sending, then "
+                            "set NEWSLETTER_SENDERS to their domains"})
 
     user = cfg("IMAP_USER")
     pw = (cfg("IMAP_APP_PASSWORD") or "")
@@ -316,7 +336,7 @@ def main():
             # send_brief.py stamps every brief with this header.
             if msg.get("X-Vertigo-Brief"):
                 continue
-            if not any(d in addr for d in SENDERS):
+            if not any(d in addr for d in senders):
                 continue
             if total >= MAX_TOTAL:
                 continue
@@ -351,7 +371,7 @@ def main():
         "fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "window_hours": args.hours,
         "mailbox": f"{user} / {box}",
-        "allowlist": SENDERS,
+        "allowlist": senders,
         "count": len(items),
         "newsletters": items,
     })
