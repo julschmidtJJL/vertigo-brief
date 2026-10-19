@@ -1,0 +1,148 @@
+# ~/.vertigo/theses.yaml — the conviction journal. EXAMPLE.
+#
+# Every thesis below is INVENTED to show the schema. None is anyone's real
+# view, and none is investment advice.
+#
+# Written by hand. One entry per holding, joined to positions.csv by ISIN.
+# A position with no entry here is reported as "no thesis — nothing to falsify"
+# rather than quietly skipped.
+#
+# falsifiers[].check:
+#   auto   — evaluated every weekday by falsifier_monitor.py, using the
+#            function registered under the same id in evaluators.py
+#   manual — requires reading a filing or release; the brief surfaces it when
+#            it becomes checkable and never pretends to have checked it
+#
+# macro_sensitivity[].basis:
+#   stated | confirmed — reaches the brief
+#   inferred           — drafted by a model, NOT reviewed, filtered out
+#
+# conviction: 1-5. Compare it against MARKET weight, not cost weight.
+
+theses:
+  - isin: DE0006047004
+    ticker: HEI.DE
+    company: Heidelberg Materials AG
+    written: 2026-01-15
+    horizon: multi-year
+    conviction: 3
+    thesis: >
+      Substrate, not product: a materials supplier sells into construction
+      regardless of which builder wins. Bought because the valuation was
+      modest relative to sales for a business with pricing power in a
+      consolidated, local market.
+    falsifiers:
+      - id: hei-valuation-stretched
+        check: auto
+        statement: >
+          If price/sales exceeds 1.5x without net margin improving beyond 8%,
+          the cheap entry I bought is gone and I am holding for momentum.
+        trigger:
+          price_to_sales_above: 1.5
+          unless_net_margin_pct_above: 8.0
+      - id: hei-pricing-power-lost
+        check: manual
+        statement: >
+          Two consecutive annual reports showing cement prices falling while
+          volumes also fall — pricing power was the thesis.
+    macro_sensitivity:
+      - name: us_housing_starts_fall
+        effect: hurts
+        basis: confirmed
+        bears_on: hei-pricing-power-lost
+        channel: >
+          Construction volume drives cement and aggregates demand; housing
+          starts are a partial proxy for it.
+        caveat: >
+          Housing is one end market among several; infrastructure is not
+          captured by this series.
+
+  - isin: US1491231015
+    ticker: CAT
+    company: Caterpillar Inc.
+    written: 2026-02-03
+    horizon: cycle
+    conviction: 2
+    thesis: >
+      Mining and energy capex stays elevated while commodity prices hold, and
+      the dealer network turns that capex into high-margin service revenue.
+    falsifiers:
+      - id: cat-copper-quarters
+        check: auto
+        statement: >
+          If copper averages below 3.50 USD/lb for two consecutive quarters,
+          the mining capex cycle I am betting on is not showing up in price.
+        trigger:
+          copper_usd_lb_below: 3.50
+          consecutive_quarters: 2
+      - id: cat-commodity-bust
+        check: auto
+        statement: >
+          If copper AND Brent both fall 25% or more from the baseline, the
+          customers' capex budgets break.
+        baseline:
+          date: 2026-02-03
+          copper_usd_lb: 4.50
+          brent_usd_bbl: 75.00
+    macro_sensitivity:
+      - name: financial_conditions_tighten
+        effect: hurts
+        basis: stated
+        channel: >
+          Equipment is bought on credit; tighter conditions delay orders.
+
+  - isin: FR0000120644
+    ticker: BN.PA
+    company: Danone S.A.
+    written: 2026-03-10
+    horizon: multi-year
+    conviction: 3
+    thesis: >
+      A turnaround in a defensive staples business: margins recover toward
+      peers while the market still prices it as a laggard.
+    falsifiers:
+      - id: bn-multiple-rerate
+        check: auto
+        statement: >
+          If trailing P/E rises above 25, the laggard discount is gone and the
+          rerating I bought for has happened.
+        trigger:
+          trailing_pe_above: 25
+      - id: bn-margin-stalls
+        check: manual
+        statement: >
+          Recurring operating margin flat or down across two consecutive
+          full-year results.
+    macro_no_exposure: >
+      Deliberately empty. Both falsifiers are company-specific numbers and no
+      macro series has an honest single channel to them.
+
+  - isin: DE0007236101
+    ticker: SIE.DE
+    company: Siemens AG
+    written: 2026-04-01
+    horizon: multi-year
+    conviction: 4
+    thesis: >
+      Industrial automation and grid equipment compound through the
+      electrification build-out; software attach raises margins over time.
+    falsifiers:
+      - id: sie-below-entry
+        check: auto
+        statement: >
+          If the share price falls below EUR 140, well under my entry, I am
+          wrong on timing at minimum and must re-underwrite the position.
+        trigger:
+          price_eur_below: 140
+      - id: sie-orders-shrink
+        check: manual
+        statement: >
+          Digital Industries orders down year on year for three consecutive
+          quarters.
+    macro_sensitivity:
+      - name: rates_up
+        effect: hurts
+        basis: confirmed
+        channel: >
+          Long-cycle capital goods are valued on distant cash flows, and
+          customer projects are rate-sensitive.

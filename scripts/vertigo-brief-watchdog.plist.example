@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.example.vertigo-brief-watchdog</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/ABSOLUTE/PATH/TO/vertigo-brief/scripts/check_brief_landed.sh</string>
+    </array>
+    <!-- Weekdays 09:00. The brief fires at 07:30 and its step watchdogs cap it
+         around 40 minutes, so 09:00 plus the script's own 25-minute poll never
+         races a healthy run. On wake-catchup launchd fires both jobs with no
+         ordering guarantee; the poll handles that rather than the schedule. -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
+    <key>StandardOutPath</key><string>/Users/YOU/Library/Logs/vertigo/brief-watchdog.out.log</string>
+    <key>StandardErrorPath</key><string>/Users/YOU/Library/Logs/vertigo/brief-watchdog.err.log</string>
+    <key>RunAtLoad</key><false/>
+</dict>
+</plist>

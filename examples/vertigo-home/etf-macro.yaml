@@ -1,0 +1,25 @@
+# MACRO EXPOSURE — PASSIVE SLEEVE. EXAMPLE.
+#
+# Not theses.yaml: an index fund has no thesis, falsifiers or conviction, and
+# blank fields invite someone to invent them. Same driver schema, separate
+# file, joined by ISIN. No news is fetched for these, deliberately.
+#
+# The bar: does a driver tell you something about YOUR EXPOSURE that you could
+# not read off the price? "The index fell" is not a driver.
+#
+# basis: inferred = drafted, not yet reviewed, and filtered out before the
+# brief sees it. Only `stated` and `confirmed` reach the brief.
+
+etfs:
+  IE00B4L5Y983:
+    name: iShares Core MSCI World UCITS ETF
+    drivers:
+      - name: rates_up
+        effect: hurts
+        basis: confirmed
+        channel: >
+          Roughly a quarter of the index is long-duration growth equity, so a
+          sharp rise in long yields reaches this position through valuation.
+        caveat: >
+          A broad index; the effect is diluted compared with a growth fund.
+    note: Largest single position in the example book.

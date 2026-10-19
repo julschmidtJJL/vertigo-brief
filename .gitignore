@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.env
+.DS_Store
+.idea/
+
+# Personal data never belongs here — it lives in ~/.vertigo and ~/.config/vertigo.
+positions.csv
+cash.csv
+theses.yaml
+evaluators.py
+news.yaml
+etf-macro.yaml
+*-state.json
+news-seen.json
+decisions.jsonl
+!examples/vertigo-home/*

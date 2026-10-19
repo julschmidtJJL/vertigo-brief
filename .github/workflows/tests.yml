@@ -1,0 +1,36 @@
+name: Tests
+
+# Offline: every network call in the suite is stubbed. VERTIGO_HOME
+# points at the example portfolio, so the registry-coverage tests check that
+# every `auto` falsifier in examples/vertigo-home/theses.yaml has an evaluator.
+permissions:
+  contents: read
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Run the suite
+        env:
+          VERTIGO_HOME: ${{ github.workspace }}/examples/vertigo-home
+        run: pytest -q tests

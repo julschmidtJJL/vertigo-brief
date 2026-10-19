@@ -1,0 +1,14 @@
+# EXAMPLE PORTFOLIO — invented for illustration. Not anyone's real holdings and
+# not a recommendation. Copy this directory to ~/.vertigo and replace every row.
+#
+# avg_price_eur : broker-reported average cost, ALWAYS in EUR, split-adjusted, NOT dividend-adjusted.
+# price_currency: the trading currency of `ticker`. Where it is not EUR, values
+#                 need an FX leg. gather.py fetches USD, CAD and HKD.
+# sleeve        : stock | etf. The scoreboard's gate reads the `stock` sleeve only.
+# name          : display only. Never used for lookup or matching.
+isin,ticker,price_currency,shares,avg_price_eur,sleeve,broker,name
+DE0006047004,HEI.DE,EUR,10,95.00,stock,broker-a,Heidelberg Materials AG
+US1491231015,CAT,USD,3,280.00,stock,broker-a,Caterpillar Inc.
+FR0000120644,BN.PA,EUR,15,58.00,stock,broker-b,Danone S.A.
+DE0007236101,SIE.DE,EUR,6,160.00,stock,broker-b,Siemens AG
+IE00B4L5Y983,EUNL.DE,EUR,40,80.00,etf,broker-a,iShares Core MSCI World UCITS ETF

@@ -1,0 +1,31 @@
+# Per-company news settings for market_brief_gather.py, keyed by ISIN.
+# EXAMPLE — matches the invented portfolio in positions.csv.
+#
+#   query    Google News query. A string, or a LIST when coverage runs under
+#            more than one name. Never use OR: combined with the time filter it
+#            silently returns nothing.
+#   lang     en | de — the Google News edition. Default en.
+#   aliases  lowercase names that count as the headline naming the company,
+#            including operating brands and listed subsidiaries. An item whose
+#            headline names none of them is dropped as off-topic.
+#
+# A holding with no entry is searched under its name from positions.csv.
+
+companies:
+  DE0006047004:
+    query: '"Heidelberg Materials"'
+    lang: de
+    aliases: [heidelberg materials, heidelbergcement]
+  US1491231015:
+    query: Caterpillar
+    aliases: [caterpillar]
+  FR0000120644:
+    query: Danone
+    aliases: [danone, activia, evian, alpro]
+  DE0007236101:
+    query: ['"Siemens AG"', '"Siemens Healthineers"']
+    aliases: [siemens, siemens healthineers]
+
+# Optional bridge for a legacy theses_export_*.json keyed by ticker, when the
+# position trades under a different listing: {positions ticker: export ticker}.
+thesis_ticker_alias: {}

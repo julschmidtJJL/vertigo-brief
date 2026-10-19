@@ -1,0 +1,152 @@
+name: Daily Brief
+
+# Moved off the Mac 2026-08-21. The job fires at 07:30 and the owner is not at
+# the laptop then; on 2026-08-21 macOS suspended mid-run and the brief never
+# arrived. A runner does not go to sleep at 09:08.
+#
+# GitHub cron is UTC and has no timezone support, so 05:30 UTC is 07:30 CEST in
+# summer and 06:30 CET in winter. The second entry is a RETRY, not a second
+# brief: GitHub drops scheduled runs under load, and BRIEF_SKIP_IF_EXISTS makes
+# the run a no-op when the file already landed.
+on:
+  schedule:
+    - cron: '30 5 * * 1-5'
+    - cron: '15 7 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: 'News window in hours (72 after a weekend)'
+        default: '24'
+      force:
+        description: 'Rebuild even if today already has a brief'
+        type: boolean
+        default: false
+
+concurrency:
+  # Never let the retry overlap the first attempt; the loser waits and then
+  # finds the file already there.
+  group: daily-brief
+  cancel-in-progress: false
+
+jobs:
+  brief:
+    # Runs only once the repo is configured: set the VERTIGO_STATE_REPO and
+    # BRIEFS_REPO repository variables (owner/name of two PRIVATE repos) and
+    # the VERTIGO_PAT secret. See README.md.
+    if: vars.VERTIGO_STATE_REPO != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Checkout the hand-written layer
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.VERTIGO_STATE_REPO }}
+          token: ${{ secrets.VERTIGO_PAT }}
+          path: state
+
+      - name: Checkout the briefs repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.BRIEFS_REPO }}
+          token: ${{ secrets.VERTIGO_PAT }}
+          path: briefs
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Cross-run memory. news-seen.json is what stops the same story being
+      # reclassified two days running; falsifier-state.json carries the closing
+      # band's hysteresis and the distance history; regime-state.json carries
+      # which decile each regime reading sat in yesterday, which is what makes
+      # the strip report a MOVE instead of a residence. None is committed —
+      # all three churn daily and would bury every real diff to the journal.
+      # Rolling key + prefix restore.
+      - name: Restore state cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            state/news-seen.json
+            state/falsifier-state.json
+            state/regime-state.json
+          key: vertigo-state-${{ github.run_id }}
+          restore-keys: |
+            vertigo-state-
+
+      # `git commit` refuses without an identity, and actions/checkout sets up
+      # auth but not a committer. Without this the brief is written, the push
+      # step never runs, and the failure is a one-liner deep in the log.
+      - name: Configure git identity
+        run: |
+          git config --global user.name  "vertigo-brief[bot]"
+          git config --global user.email "vertigo-brief@users.noreply.github.com"
+
+      - name: Run the brief
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_APP_PASSWORD: ${{ secrets.IMAP_APP_PASSWORD }}
+          IMAP_MAILBOX: ${{ secrets.IMAP_MAILBOX }}
+          # Output address, deliberately NOT the input one. The brief is sent
+          # FROM the newsletter mailbox (that account owns the app password)
+          # but TO the personal address: the asset-management mailbox takes ~10
+          # newsletters a day and is an input collection. Delivering the brief
+          # there buries the one thing written FOR the reader among the
+          # subscriptions. A secret rather than a literal so it is redacted in
+          # run logs like every other address here.
+          BRIEF_MAIL_TO: ${{ secrets.BRIEF_MAIL_TO }}
+          VERTIGO_REPO: ${{ github.workspace }}
+          VERTIGO_HOME: ${{ github.workspace }}/state
+          BRIEFS_DIR: ${{ github.workspace }}/briefs
+          VERTIGO_LOG_DIR: ${{ runner.temp }}/log
+          VERTIGO_PYTHON: python3
+          # The runner has no ~/.vertigo and no ~/.config/vertigo; every
+          # credential arrives above. The scripts fall back to the environment.
+          # Two plain variables, no expression ternary. `X && '' || '1'` looks
+          # like a ternary and is not: when X is true it yields '', which is
+          # falsey, so it falls through to '1' and BOTH branches return '1'.
+          # And `inputs.force == true` is false anyway when the input arrives
+          # from `gh` as the string "true" — GitHub coerces across types via
+          # number, and "true" is NaN. bash can do the comparison correctly.
+          BRIEF_SKIP_IF_EXISTS: '1'
+          BRIEF_FORCE: ${{ inputs.force }}
+          BRIEF_HOURS: ${{ inputs.hours }}
+        run: bash scripts/run_daily_brief.sh
+
+      # The script pushes ~/briefs itself when that directory is a git repo,
+      # which it is here. This only reports what happened.
+      # Echo to STDOUT as well as the summary. The first failed run said only
+      # "the falsifier monitor produced no output" — the reason was in a log
+      # file on the runner that no API exposes, so diagnosing it meant guessing.
+      - name: Report
+        if: always()
+        run: |
+          L="${{ runner.temp }}/log/daily-brief.log"
+          echo "### Daily brief" >> $GITHUB_STEP_SUMMARY
+          if [ -f "$L" ]; then
+            echo "----- daily-brief.log -----"
+            cat "$L"
+            echo "---------------------------"
+            { echo '```'; cat "$L"; echo '```'; } >> $GITHUB_STEP_SUMMARY
+          else
+            echo "no daily-brief.log at $L"
+          fi
+          ls -l briefs/*.md 2>/dev/null | tail -3 | tee -a $GITHUB_STEP_SUMMARY || true
+
+      - name: Save state cache
+        if: always()
+        uses: actions/cache@v4
+        with:
+          path: |
+            state/news-seen.json
+            state/falsifier-state.json
+            state/regime-state.json
+          key: vertigo-state-${{ github.run_id }}
