@@ -117,8 +117,13 @@ jobs:
 
       - name: Run the brief
         env:
+          # One of the two keys is required. With both set, OpenAI is used
+          # unless the BRIEF_AI_PROVIDER variable says `anthropic`.
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          # Everything below is optional. With only OPENAI_API_KEY set, the
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BRIEF_AI_PROVIDER: ${{ vars.BRIEF_AI_PROVIDER }}
+          BRIEF_MODEL: ${{ vars.BRIEF_MODEL }}
+          # Everything below is optional. With only an API key set, the
           # brief is written and pushed, General news is omitted and no email
           # is sent. An unset secret arrives as an empty string, which every
           # script treats as unset.

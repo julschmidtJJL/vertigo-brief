@@ -4,5 +4,6 @@ numpy>=2
 yfinance>=0.2.0
 PyYAML>=6
 openai>=1.40
+anthropic>=1.15
 markdown>=3.5
 requests>=2
