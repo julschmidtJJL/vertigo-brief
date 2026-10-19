@@ -19,6 +19,10 @@ came from:
 This is a personal tool, published as-is. It assumes a single user, a
 EUR-based book and Yahoo Finance data.
 
+It is extracted from the private repository behind my own daily brief
+(562 commits since February 2026). That history stays private because it
+holds my portfolio and notes.
+
 ## Quick start
 
 Paste this into Claude Code. It works the same in Codex or Cursor.
